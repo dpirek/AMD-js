@@ -2,8 +2,9 @@
 
   // Gloab settings.
   var namespace = 'APP',
-      filePath = 'js/',
-      filePrefix = 'APP.';
+    filePath = 'js/',
+    filePrefix = 'APP.',
+    definedModules = {};
 
   // Set app namespace.
   window[namespace] = {};
@@ -73,24 +74,33 @@
 
     // Check if dependancies exist, load them otherwise.
     forEach(dependencies, function (i, d) {
-
-      // Decide if dependancy is loaded.
-      if (window[namespace][d]) {
+      if (definedModules[d]) {
+        _dependencies[i] = APP[d];
         index++;
-        _dependencies.push(APP[d]);
         if (length === index) {
           callBack(_dependencies);
         }
       } else {
+        loadScript({
+          i: i,
+          d: d
+        }, filePath + filePrefix + d + '.js', function (obj) {
 
-        // TODO: sometimes there is overlap in dependancy loading, 
-        // which causes wrong callback timing: fix.
+          var finalCallback = function () {
+            _dependencies[obj.i] = APP[obj.d];
+            index++;
+            if (length === index) {
+              callBack(_dependencies);
+            }
+          };
 
-        loadScript(d, filePath + filePrefix + d + '.js', function (key) {
-          index++;
-          _dependencies.push(APP[key]);
-          if (length === index) {
-            callBack(_dependencies);
+          // Handle nasted dependacies.
+          if (definedModules[d].dependencies.length > 0) {
+            handleDependencies(definedModules[d].dependencies, function (d2) {
+              finalCallback();
+            });
+          } else {
+            finalCallback();
           }
         });
       }
@@ -99,6 +109,13 @@
 
   // Global 'define' AMD method.
   window.define = function (name, dependencies, callBack) {
+
+    // Create dictionary.
+    definedModules[name] = {
+      name: name,
+      dependencies: dependencies
+    };
+
     handleDependencies(dependencies, function (d) {
       window[namespace][name] = callBack.apply(this, d);
     });
